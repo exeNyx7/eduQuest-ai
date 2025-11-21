@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: eduquest-backend
+    env: python
+    plan: starter
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    rootDir: "backend"
+    envVars:
+      - key: GROQ_API_KEY
+        value: YOUR_GROQ_KEY
+      - key: MONGO_URI
+        value: YOUR_MONGODB_ATLAS_URI

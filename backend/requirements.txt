@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+motor
+pymongo
+groq
+python-dotenv
+pydantic
+sentence-transformers
+numpy
