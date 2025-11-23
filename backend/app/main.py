@@ -5,6 +5,10 @@ import os
 from app.routes.quiz import router as quiz_router
 from app.routes.content import router as content_router
 from app.routes.user import router as user_router
+from app.routes.auth import router as auth_router
+from app.routes.weekly_quests import router as weekly_quests_router
+from app.routes.daily_quests import router as daily_quests_router
+from app.routes.password_reset import router as password_reset_router
 from app.config.db import get_client, get_db
 
 app = FastAPI(title="EduQuest AI - Backend", version="0.1.0")
@@ -21,6 +25,10 @@ app.add_middleware(
 app.include_router(quiz_router, prefix="/api")
 app.include_router(content_router, prefix="/api")
 app.include_router(user_router, prefix="/api/user")
+app.include_router(auth_router, prefix="/api/user")
+app.include_router(weekly_quests_router, prefix="/api/user")
+app.include_router(daily_quests_router, prefix="/api/user")
+app.include_router(password_reset_router, prefix="/api/auth")
 
 
 @app.get("/")

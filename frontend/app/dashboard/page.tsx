@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGame } from "@/contexts/GameContext";
 import { motion } from "framer-motion";
+import QuestsSummary from "@/components/QuestsSummary";
+import ActivityHeatmap from "@/components/ActivityHeatmap";
+import AchievementsPanel from "@/components/AchievementsPanel";
+import AnimatedXPBar from "@/components/AnimatedXPBar";
+import RankUpModal from "@/components/RankUpModal";
+import StreakInfo from "@/components/StreakInfo";
+import DailyBonusModal from "@/components/DailyBonusModal";
+import LoginCalendar from "@/components/LoginCalendar";
 
 const RANK_COLORS = {
   Bronze: "from-orange-700 to-orange-900",
@@ -37,16 +45,79 @@ function getNextRank(rank: string) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isLoading } = useGame();
+  const { user, isLoading, updateStats } = useGame();
   const [mounted, setMounted] = useState(false);
+  const [showRankUp, setShowRankUp] = useState(false);
+  const [rankUpData, setRankUpData] = useState<{ oldRank: string; newRank: string; xpEarned: number } | null>(null);
+  const [showDailyBonus, setShowDailyBonus] = useState(false);
+  const [dailyBonusData, setDailyBonusData] = useState<any>(null);
+  const [loginStreak, setLoginStreak] = useState(0);
 
   useEffect(() => {
     setMounted(true);
+    
+    // Check for pending rank-up notification
+    const pendingRankUp = localStorage.getItem('eduquest_pending_rankup');
+    if (pendingRankUp) {
+      const data = JSON.parse(pendingRankUp);
+      setRankUpData(data);
+      setShowRankUp(true);
+      localStorage.removeItem('eduquest_pending_rankup');
+    }
   }, []);
 
+  // Check daily login bonus
   useEffect(() => {
-    // Redirect to onboarding if profile not complete
-    if (mounted && user && !user.profile.goal) {
+    const checkDailyBonus = async () => {
+      if (!user) return;
+
+      try {
+        const res = await fetch(`/api/user/daily-bonus/check/${user.id}`);
+        if (!res.ok) throw new Error("Failed to check daily bonus");
+
+        const data = await res.json();
+        console.log("[DAILY BONUS] Check result:", data);
+
+        setLoginStreak(data.loginStreak || 0);
+
+        if (data.claimable) {
+          // Auto-claim the bonus
+          const claimRes = await fetch(`/api/user/daily-bonus/claim/${user.id}`, {
+            method: "POST",
+          });
+
+          if (claimRes.ok) {
+            const claimData = await claimRes.json();
+            console.log("[DAILY BONUS] Claimed:", claimData);
+
+            // Update user stats
+            if (updateStats && claimData.newTotalXP) {
+              updateStats({
+                totalXP: claimData.newTotalXP,
+              });
+            }
+
+            // Show modal
+            setDailyBonusData(claimData);
+            setTimeout(() => {
+              setShowDailyBonus(true);
+            }, 1000); // Delay to show after rank up modal if present
+          }
+        }
+      } catch (error) {
+        console.error("Error checking daily bonus:", error);
+      }
+    };
+
+    if (mounted && user) {
+      checkDailyBonus();
+    }
+  }, [mounted, user]);
+
+  useEffect(() => {
+    // Only redirect to onboarding if NEW user (no goal set) AND hasn't completed onboarding yet
+    const hasCompletedOnboarding = localStorage.getItem("eduquest_onboarding_done");
+    if (mounted && user && !user.profile.goal && !hasCompletedOnboarding) {
       router.push("/onboarding");
     }
   }, [mounted, user, router]);
@@ -102,23 +173,13 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* XP Bar */}
+            {/* XP Bar - Animated */}
             <div className="flex-1 w-full">
-              <div className="flex justify-between text-sm text-gray-300 mb-2">
-                <span>XP: {user.stats.totalXP}</span>
-                <span>Next: {xpToNextRank} XP to {nextRank}</span>
-              </div>
-              <div className="relative h-8 bg-purple-900/50 rounded-full overflow-hidden border-2 border-purple-400/30">
-                <motion.div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-yellow-400 via-orange-400 to-pink-400"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${xpProgress}%` }}
-                  transition={{ duration: 1, ease: "easeOut" }}
-                />
-                <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white drop-shadow">
-                  {Math.round(xpProgress)}%
-                </div>
-              </div>
+              <AnimatedXPBar
+                currentXP={user.stats.totalXP}
+                nextRankXP={nextRankXP}
+                rank={user.rank}
+              />
             </div>
 
             {/* Streak */}
@@ -136,26 +197,26 @@ export default function DashboardPage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-2xl p-6 text-center">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-xl p-6 text-center">
             <div className="text-4xl mb-2">✅</div>
             <div className="text-3xl font-bold text-green-400">{user.stats.questsCompleted}</div>
-            <div className="text-sm text-gray-300">Quests Completed</div>
+            <div className="text-sm text-gray-300">Quests</div>
           </div>
 
-          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-2xl p-6 text-center">
+          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-xl p-6 text-center">
             <div className="text-4xl mb-2">🎯</div>
             <div className="text-3xl font-bold text-blue-400">{accuracy}%</div>
             <div className="text-sm text-gray-300">Accuracy</div>
           </div>
 
-          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-2xl p-6 text-center">
+          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-xl p-6 text-center">
             <div className="text-4xl mb-2">✨</div>
             <div className="text-3xl font-bold text-yellow-400">{user.stats.correctAnswers}</div>
-            <div className="text-sm text-gray-300">Correct Answers</div>
+            <div className="text-sm text-gray-300">Correct</div>
           </div>
 
-          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-2xl p-6 text-center">
+          <div className="bg-purple-800/40 backdrop-blur-sm border-2 border-purple-400/30 rounded-xl p-6 text-center">
             <div className="text-4xl mb-2">📚</div>
             <div className="text-3xl font-bold text-purple-400">{user.stats.longestStreak}</div>
             <div className="text-sm text-gray-300">Longest Streak</div>
@@ -163,7 +224,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Action Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Start Quest */}
           <div
             onClick={() => router.push("/quest")}
@@ -199,33 +260,50 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Profile Info */}
-        <div className="mt-8 bg-purple-800/20 backdrop-blur-sm border-2 border-purple-400/20 rounded-2xl p-6">
-          <h3 className="text-2xl font-bold text-white mb-4">Your Profile</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-300">
-            <div>
-              <span className="text-gray-400">Goal:</span>
-              <span className="ml-2 text-white font-semibold">{user.profile.goal || "Not set"}</span>
-            </div>
-            <div>
-              <span className="text-gray-400">Subjects:</span>
-              <span className="ml-2 text-white font-semibold">
-                {user.profile.subjects.length > 0 ? user.profile.subjects.join(", ") : "Not set"}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-400">Power Level:</span>
-              <span className="ml-2 text-white font-semibold">{user.profile.powerLevel}</span>
-            </div>
-          </div>
-          <button
-            onClick={() => router.push("/onboarding")}
-            className="mt-4 px-4 py-2 bg-purple-700/60 text-white rounded-lg hover:bg-purple-600/80 transition-colors"
-          >
-            ⚙️ Edit Profile
-          </button>
+        {/* Streak Info & Milestones */}
+        <div className="mb-8">
+          <StreakInfo userId={user.id} />
         </div>
+
+        {/* Login Calendar */}
+        <div className="mb-8">
+          <LoginCalendar userId={user.id} loginStreak={loginStreak} />
+        </div>
+
+        {/* Quests Summary */}
+        <div className="mb-8">
+          <QuestsSummary userId={user.id} />
+        </div>
+
+        {/* Activity Heatmap */}
+        <div className="mb-8">
+          <ActivityHeatmap userId={user.id} />
+        </div>
+
+
       </div>
+
+      {/* Rank Up Modal */}
+      {rankUpData && (
+        <RankUpModal
+          show={showRankUp}
+          oldRank={rankUpData.oldRank}
+          newRank={rankUpData.newRank}
+          xpEarned={rankUpData.xpEarned}
+          onClose={() => setShowRankUp(false)}
+        />
+      )}
+
+      {/* Daily Bonus Modal */}
+      {dailyBonusData && (
+        <DailyBonusModal
+          isOpen={showDailyBonus}
+          onClose={() => setShowDailyBonus(false)}
+          bonus={dailyBonusData.bonus}
+          loginStreak={dailyBonusData.loginStreak}
+          nextBonus={dailyBonusData.bonus.nextBonus}
+        />
+      )}
     </main>
   );
 }

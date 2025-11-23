@@ -56,8 +56,8 @@ export default function CompletionScreen({
           <button onClick={onNewQuest} className="button bg-quest.yellow text-black">
             🔥 New Quest
           </button>
-          <a href="/" className="button bg-white/20">
-            🏠 Home
+          <a href="/dashboard" className="button bg-white/20">
+            🏠 Dashboard
           </a>
         </div>
       </div>

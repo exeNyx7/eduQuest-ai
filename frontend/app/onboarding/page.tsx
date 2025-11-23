@@ -57,6 +57,9 @@ export default function OnboardingPage() {
       powerLevel: selectedPowerLevel,
     });
     
+    // Mark onboarding as complete
+    localStorage.setItem("eduquest_onboarding_done", "true");
+    
     // Redirect to dashboard
     router.push("/dashboard");
   };

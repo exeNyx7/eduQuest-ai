@@ -1,24 +1,20 @@
 "use client";
 
-import './globals.css'
+import '../globals.css'
 import { ReactNode } from 'react'
 import { Fredoka } from 'next/font/google'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { GameProvider } from '@/contexts/GameContext'
-import Navigation from '@/components/Navigation'
 
 const fredoka = Fredoka({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] })
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className={`${fredoka.className} min-h-screen bg-gradient-to-br from-purple-900 via-indigo-900 to-purple-800`}>
         <ErrorBoundary>
           <GameProvider>
-            <Navigation />
-            <div className="pt-16">
-              {children}
-            </div>
+            {children}
           </GameProvider>
         </ErrorBoundary>
       </body>

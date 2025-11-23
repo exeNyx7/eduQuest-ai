@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional
+from bson import ObjectId
 
 from app.models.user_schemas import (
     QuizResultRequest,
@@ -9,6 +10,7 @@ from app.models.user_schemas import (
     UpdateStatsRequest,
     UpdateStatsResponse,
     User,
+    Achievement,
 )
 from app.services.gamification import (
     calculate_xp,
@@ -16,7 +18,12 @@ from app.services.gamification import (
     update_streak,
     get_leaderboard,
     calculate_percentile,
+    get_streak_multiplier,
+    use_streak_freeze,
+    check_daily_login_bonus,
+    claim_daily_login_bonus,
 )
+from app.services.achievements import check_achievements, get_user_achievements
 from app.config.db import get_collection
 
 router = APIRouter(tags=["user"])
@@ -29,28 +36,69 @@ async def submit_quiz_result(req: QuizResultRequest):
     try:
         print(f"[QUIZ SUBMIT] User {req.userId} completed quiz - Score: {req.score}/{req.totalQuestions}")
         
-        # Calculate XP
+        # Check if guest user (starts with "guest_")
+        is_guest = req.userId.startswith("guest_")
+        
+        if is_guest:
+            # Guest mode: Calculate XP but don't save to DB
+            print(f"[QUIZ SUBMIT] Guest user detected - calculating XP only")
+            xp_earned, breakdown = calculate_xp(
+                req.correctAnswers,
+                0,  # No streak for guests
+                req.perfectScore
+            )
+            
+            print(f"[QUIZ SUBMIT] XP Earned: {xp_earned} (Base: {breakdown['base']}, Perfect: {breakdown['perfect_bonus']})")
+            
+            return QuizResultResponse(
+                xpEarned=xp_earned,
+                breakdown=breakdown,
+                newTotalXP=xp_earned,  # Guest starts fresh
+                newRank="Bronze",
+                rankedUp=False,
+                questsCompleted=[],
+            )
+        
+        # Registered user: Full stats tracking
         users_coll = get_collection("users")
-        user = await users_coll.find_one({"_id": req.userId})
+        
+        # Convert string ID to ObjectId
+        try:
+            user_object_id = ObjectId(req.userId)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid user ID format")
+        
+        user = await users_coll.find_one({"_id": user_object_id})
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
         current_streak = user.get("stats", {}).get("currentStreak", 0)
+        
+        # Calculate time bonus if provided
+        time_bonus = 0
+        if hasattr(req, 'timeBonus') and req.timeBonus:
+            time_bonus = req.timeBonus
+        
+        # Get streak multiplier
+        multiplier = get_streak_multiplier(current_streak)
+        
         xp_earned, breakdown = calculate_xp(
             req.correctAnswers,
             current_streak,
-            req.perfectScore
+            req.perfectScore,
+            time_bonus,
+            multiplier
         )
         
-        print(f"[QUIZ SUBMIT] XP Earned: {xp_earned} (Base: {breakdown['base']}, Streak: {breakdown['streak_bonus']}, Perfect: {breakdown['perfect_bonus']})")
+        print(f"[QUIZ SUBMIT] XP Earned: {xp_earned} (Base: {breakdown['base']}, Streak: {breakdown['streak_bonus']}, Perfect: {breakdown['perfect_bonus']}, Time: {breakdown['time_bonus']}, Multiplier: {multiplier}x)")
         
-        # Update XP and rank
+        # Update XP and rank (pass string, will be converted in function)
         xp_result = await update_user_xp(req.userId, xp_earned)
         
-        # Update answer counts
+        # Update answer counts (use ObjectId here)
         await users_coll.update_one(
-            {"_id": req.userId},
+            {"_id": user_object_id},
             {
                 "$inc": {
                     "stats.correctAnswers": req.correctAnswers,
@@ -60,15 +108,44 @@ async def submit_quiz_result(req: QuizResultRequest):
             }
         )
         
-        # Update streak (only if user got > 50%)
-        if req.score >= 50:
-            new_streak = await update_streak(req.userId, increment=True)
-            print(f"[QUIZ SUBMIT] Streak updated: {new_streak}")
+        # Update daily streak (only once per day)
+        streak_result = await update_streak(req.userId)
+        if streak_result["updated"]:
+            print(f"[QUIZ SUBMIT] Daily streak updated: {streak_result['currentStreak']}")
+            if streak_result.get("milestone"):
+                print(f"[QUIZ SUBMIT] 🎉 Milestone reached: {streak_result['milestone']['days']} days!")
+        else:
+            print(f"[QUIZ SUBMIT] Streak already updated today: {streak_result['currentStreak']}")
+        
+        # Check for newly unlocked achievements
+        updated_user = await users_coll.find_one({"_id": user_object_id})
+        user_stats = {
+            "totalXP": updated_user.get("stats", {}).get("totalXP", 0),
+            "rank": xp_result["newRank"],
+            "questsCompleted": updated_user.get("stats", {}).get("questsCompleted", 0),
+            "streak": updated_user.get("stats", {}).get("currentStreak", 0),
+            "longestStreak": updated_user.get("stats", {}).get("longestStreak", 0),
+            "totalCorrect": updated_user.get("stats", {}).get("totalCorrect", 0),
+            "isPerfect": req.score == 100,
+        }
+        newly_unlocked = await check_achievements(req.userId, user_stats)
+        print(f"[QUIZ SUBMIT] Achievements unlocked: {[a['name'] for a in newly_unlocked]}")
         
         # TODO: Check and update daily quests
         quests_completed = []
         
-        print(f"[QUIZ SUBMIT] ✅ Success! New XP: {xp_result['newXP']}, Rank: {xp_result['newRank']}")
+        # Prepare milestone data if reached
+        milestone_data = None
+        if streak_result.get("milestone"):
+            milestone_info = streak_result["milestone"]
+            from app.models.user_schemas import StreakMilestone
+            milestone_data = StreakMilestone(
+                days=milestone_info["days"],
+                freezeTokens=milestone_info["freezeTokens"],
+                bonusXP=milestone_info["bonusXP"]
+            )
+        
+        print(f"[QUIZ SUBMIT] ✅ Success! New XP: {xp_result['newXP']}, Rank: {xp_result['newRank']}, Multiplier: {multiplier}x")
         
         return QuizResultResponse(
             xpEarned=xp_earned,
@@ -77,6 +154,9 @@ async def submit_quiz_result(req: QuizResultRequest):
             newRank=xp_result["newRank"],
             rankedUp=xp_result["rankedUp"],
             questsCompleted=quests_completed,
+            achievementsUnlocked=newly_unlocked,
+            streakMilestone=milestone_data,
+            streakMultiplier=multiplier,
         )
     
     except Exception as e:
@@ -90,10 +170,20 @@ async def get_user_profile(user_id: str):
     """
     try:
         users_coll = get_collection("users")
-        user = await users_coll.find_one({"_id": user_id})
+        
+        # Convert string ID to ObjectId
+        try:
+            user_object_id = ObjectId(user_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid user ID format")
+        
+        user = await users_coll.find_one({"_id": user_object_id})
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        
+        # Convert ObjectId to string for JSON response
+        user["_id"] = str(user["_id"])
         
         return user
     
@@ -172,7 +262,14 @@ async def get_user_stats(user_id: str):
     """
     try:
         users_coll = get_collection("users")
-        user = await users_coll.find_one({"_id": user_id})
+        
+        # Convert string ID to ObjectId
+        try:
+            user_object_id = ObjectId(user_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid user ID format")
+        
+        user = await users_coll.find_one({"_id": user_object_id})
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -196,4 +293,128 @@ async def get_user_stats(user_id: str):
     
     except Exception as e:
         print(f"[GET STATS ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/achievements/{user_id}")
+async def get_achievements(user_id: str):
+    """
+    Get user's earned achievements
+    """
+    try:
+        achievements = await get_user_achievements(user_id)
+        return {"achievements": achievements}
+    
+    except Exception as e:
+        print(f"[GET ACHIEVEMENTS ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/streak/info/{user_id}")
+async def get_streak_info(user_id: str):
+    """
+    Get streak info including freeze tokens, multiplier, and next milestone
+    """
+    try:
+        users_coll = get_collection("users")
+        
+        # Convert string ID to ObjectId
+        try:
+            user_object_id = ObjectId(user_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid user ID format")
+        
+        user = await users_coll.find_one({"_id": user_object_id})
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        current_streak = user.get("stats", {}).get("currentStreak", 0)
+        freeze_tokens = user.get("streakFreezes", 0)
+        freeze_active = user.get("streakFreezeActive", False)
+        milestones_reached = user.get("streakMilestonesReached", [])
+        
+        # Get current multiplier
+        multiplier = get_streak_multiplier(current_streak)
+        
+        # Find next milestone
+        from app.services.gamification import STREAK_MILESTONES
+        next_milestone = None
+        for days in sorted(STREAK_MILESTONES.keys()):
+            if days > current_streak and days not in milestones_reached:
+                next_milestone = {
+                    "days": days,
+                    "rewards": STREAK_MILESTONES[days]
+                }
+                break
+        
+        return {
+            "currentStreak": current_streak,
+            "freezeTokens": freeze_tokens,
+            "freezeActive": freeze_active,
+            "multiplier": multiplier,
+            "nextMilestone": next_milestone,
+            "milestonesReached": milestones_reached,
+        }
+    
+    except Exception as e:
+        print(f"[GET STREAK INFO ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/streak/use-freeze/{user_id}")
+async def use_freeze_token(user_id: str):
+    """
+    Use a streak freeze token to protect streak for 24 hours
+    """
+    try:
+        result = await use_streak_freeze(user_id)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        print(f"[STREAK FREEZE] User {user_id} activated freeze. Tokens remaining: {result['tokensRemaining']}")
+        
+        return {
+            "success": True,
+            "tokensRemaining": result["tokensRemaining"],
+            "expiresAt": result["expiresAt"],
+            "message": "Streak freeze activated! Your streak is protected for 24 hours."
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[USE FREEZE ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/daily-bonus/check/{user_id}")
+async def check_daily_bonus(user_id: str):
+    """
+    Check if user can claim daily login bonus
+    """
+    try:
+        result = await check_daily_login_bonus(user_id)
+        return result
+    
+    except Exception as e:
+        print(f"[CHECK DAILY BONUS ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/daily-bonus/claim/{user_id}")
+async def claim_daily_bonus(user_id: str):
+    """
+    Claim daily login bonus
+    """
+    try:
+        result = await claim_daily_login_bonus(user_id)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to claim bonus"))
+        
+        print(f"[DAILY BONUS] User {user_id} claimed bonus. Streak: {result['loginStreak']}, XP: +{result['bonus'].get('xp', 0)}")
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[CLAIM DAILY BONUS ERROR] {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

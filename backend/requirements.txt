@@ -7,3 +7,5 @@ python-dotenv
 pydantic
 sentence-transformers
 numpy
+bcrypt
+email-validator
