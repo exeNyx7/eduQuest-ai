@@ -88,6 +88,82 @@ class AIEngine:
                 raise ValueError(f"Item {i} answer must be one of the options")
         return items
 
+    def generate_flashcards(self, text_context: str, topic: str = "", num_cards: int = 10, difficulty: str = "medium") -> List[dict]:
+        """
+        Generate flashcards from provided context or topic.
+        Returns a list of dicts with keys: front, back, difficulty.
+        """
+        difficulty_instructions = {
+            "easy": "Create simple, straightforward flashcards focusing on basic facts and definitions.",
+            "medium": "Create moderately challenging flashcards that test understanding of concepts.",
+            "hard": "Create advanced flashcards requiring deep analysis and critical thinking."
+        }
+        
+        if topic and not text_context:
+            # Generate from topic only
+            system_prompt = (
+                f"You are EduQuest's Flashcard Master. Create {num_cards} high-quality educational flashcards about '{topic}'. "
+                f"Difficulty: {difficulty.upper()}. {difficulty_instructions.get(difficulty, '')} "
+                "Output JSON ONLY, no preamble, markdown, or code fences. "
+                "Schema: [{\"front\": str, \"back\": str, \"hint\": str, \"difficulty\": str, \"tags\": [str]}]. "
+                "RULES:\n"
+                "1. Front: Must be a complete, clear question (minimum 8 words) or a meaningful term\n"
+                "2. Back: Provide comprehensive answer with key details (minimum 15 words)\n"
+                "3. Hint: Give a subtle clue without revealing the answer (minimum 5 words)\n"
+                "4. Tags: Generate 2-4 relevant tags/categories for each card (e.g., ['biology', 'cells', 'exam-prep'])\n"
+                "5. Avoid single-word or vague questions\n"
+                "6. Each flashcard should test a distinct concept\n"
+                "7. Use clear, educational language\n"
+                "IMPORTANT: Avoid using backslashes in your response."
+            )
+            user_prompt = f"Generate {num_cards} {difficulty}-level flashcards about: {topic}\n\nReturn ONLY a JSON array."
+        else:
+            # Generate from provided content
+            system_prompt = (
+                f"You are EduQuest's Flashcard Master. Create {num_cards} high-quality educational flashcards from the content. "
+                f"Difficulty: {difficulty.upper()}. {difficulty_instructions.get(difficulty, '')} "
+                "Output JSON ONLY, no preamble, markdown, or code fences. "
+                "Schema: [{\"front\": str, \"back\": str, \"hint\": str, \"difficulty\": str, \"tags\": [str]}]. "
+                "RULES:\n"
+                "1. Front: Must be a complete, clear question (minimum 8 words) or a meaningful term\n"
+                "2. Back: Provide comprehensive answer with key details (minimum 15 words)\n"
+                "3. Hint: Give a subtle clue without revealing the answer (minimum 5 words)\n"
+                "4. Tags: Generate 2-4 relevant tags/categories for each card based on the content\n"
+                "5. Extract the most important concepts from the content\n"
+                "6. Avoid single-word or vague questions\n"
+                "7. Each flashcard should test a distinct concept\n"
+                "8. Use examples from the content when relevant\n"
+                "IMPORTANT: Avoid using backslashes in your response."
+            )
+            user_prompt = (
+                f"Content to create {num_cards} {difficulty}-level flashcards from:\n\n" + text_context.strip() + "\n\n"
+                "Return ONLY a JSON array as specified."
+            )
+        
+        raw = self._chat(system_prompt, user_prompt)
+        print(f"[AI_ENGINE] Flashcards raw response length: {len(raw)} chars")
+        
+        json_text = self._extract_json_array(raw)
+        json_text = self._fix_json_escapes(json_text)
+        
+        try:
+            items = json.loads(json_text)
+        except json.JSONDecodeError as e:
+            print(f"[AI_ENGINE ERROR] Flashcard JSON parsing failed: {str(e)}")
+            raise
+        
+        # Validation
+        if not isinstance(items, list):
+            raise ValueError("Model did not return a JSON list")
+        for i, it in enumerate(items):
+            if not all(k in it for k in ("front", "back")):
+                raise ValueError(f"Flashcard {i} missing required keys")
+            # Add difficulty if not present
+            if "difficulty" not in it:
+                it["difficulty"] = difficulty
+        
+        return items
+
     def extract_topic(self, text: str) -> str:
         """Return a concise keyword or short phrase for Unsplash search."""
         system_prompt = (

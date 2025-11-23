@@ -84,35 +84,35 @@ export default function LoginCalendar({ userId, loginStreak }: LoginCalendarProp
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-10 gap-2">
+      <div className="grid grid-cols-10 gap-1.5 max-w-md mx-auto">
         {calendarDays.map((day, index) => (
           <motion.div
             key={index}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: index * 0.02 }}
-            className={`aspect-square rounded-lg border-2 flex items-center justify-center transition-all hover:scale-110 cursor-pointer ${getDayColor(
+            className={`w-7 h-7 rounded-sm border flex items-center justify-center transition-all hover:scale-110 cursor-pointer ${getDayColor(
               day.status
             )}`}
             title={`${day.date.toLocaleDateString()} - ${day.status === "today" ? "Today" : day.status === "logged-in" ? "Logged in" : "Missed"}`}
           >
-            {getDayIcon(day.status)}
+            <span className="text-xs">{getDayIcon(day.status)}</span>
           </motion.div>
         ))}
       </div>
 
       {/* Legend */}
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-gradient-to-br from-yellow-400 to-orange-500 border border-yellow-300"></div>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-gradient-to-br from-yellow-400 to-orange-500 border border-yellow-300"></div>
           <span className="text-gray-300">Today</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-gradient-to-br from-green-500 to-emerald-600 border border-green-400"></div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-gradient-to-br from-green-500 to-emerald-600 border border-green-400"></div>
           <span className="text-gray-300">Logged In</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-gray-700/50 border border-gray-600"></div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-gray-700/50 border border-gray-600"></div>
           <span className="text-gray-300">Missed</span>
         </div>
       </div>

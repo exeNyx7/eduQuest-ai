@@ -9,3 +9,5 @@ sentence-transformers
 numpy
 bcrypt
 email-validator
+PyPDF2
+python-pptx

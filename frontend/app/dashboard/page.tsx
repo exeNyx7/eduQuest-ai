@@ -275,12 +275,6 @@ export default function DashboardPage() {
           <QuestsSummary userId={user.id} />
         </div>
 
-        {/* Activity Heatmap */}
-        <div className="mb-8">
-          <ActivityHeatmap userId={user.id} />
-        </div>
-
-
       </div>
 
       {/* Rank Up Modal */}
