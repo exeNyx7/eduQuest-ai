@@ -314,6 +314,18 @@ async def get_streak_info(user_id: str):
     Get streak info including freeze tokens, multiplier, and next milestone
     """
     try:
+        # Check if guest user
+        if user_id.startswith("guest_"):
+            # Return default values for guest users
+            return {
+                "currentStreak": 0,
+                "freezeTokens": 0,
+                "freezeActive": False,
+                "multiplier": 1.0,
+                "nextMilestone": None,
+                "milestonesReached": [],
+            }
+        
         users_coll = get_collection("users")
         
         # Convert string ID to ObjectId
@@ -391,6 +403,16 @@ async def check_daily_bonus(user_id: str):
     Check if user can claim daily login bonus
     """
     try:
+        # Check if guest user
+        if user_id.startswith("guest_"):
+            # Guests can't claim daily bonuses
+            return {
+                "canClaim": False,
+                "alreadyClaimed": False,
+                "loginStreak": 0,
+                "bonus": None
+            }
+        
         result = await check_daily_login_bonus(user_id)
         return result
     

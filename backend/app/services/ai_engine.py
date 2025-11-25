@@ -1,6 +1,6 @@
 import json
 import re
-from typing import List
+from typing import List, Dict
 
 from groq import Groq
 import os
@@ -183,6 +183,75 @@ class AIEngine:
         snippet = match.group(0)
         return snippet
     
+    def chat_with_document(self, context: str, user_message: str, chat_history: List[Dict] = None) -> str:
+        """
+        Chat with a specific document using RAG context.
+        Maintains conversation history for context.
+        
+        Args:
+            context: Retrieved relevant chunks from the document
+            user_message: Current user query
+            chat_history: List of previous messages [{"role": "user/assistant", "content": "..."}]
+        
+        Returns:
+            AI response based on document context
+        """
+        system_prompt = (
+            "You are the Oracle, a wise entity residing in the Arcane Library of EduQuest. "
+            "Your purpose is to help users understand their study materials by answering questions "
+            "based ONLY on the provided context from their uploaded documents. "
+            "Be clear, concise, and educational. If the context doesn't contain the answer, "
+            "politely say so and suggest what information might be helpful. "
+            "Use a friendly, encouraging tone suitable for students."
+        )
+        
+        # Build conversation with context
+        user_prompt = f"Context from the Scroll:\n{context}\n\nUser Question: {user_message}"
+        
+        # If there's chat history, include it
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        if chat_history:
+            messages.extend(chat_history[-4:])  # Keep last 4 messages for context
+        
+        messages.append({"role": "user", "content": user_prompt})
+        
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0.4,
+        )
+        return resp.choices[0].message.content or ""
+    
+    def generate_summary(self, text: str, max_length: str = "medium") -> str:
+        """
+        Generate a Quick Recap summary of a document.
+        
+        Args:
+            text: Document content to summarize
+            max_length: "short" (2-3 sentences), "medium" (1 paragraph), "long" (2-3 paragraphs)
+        
+        Returns:
+            Summary text
+        """
+        length_instructions = {
+            "short": "Provide a 2-3 sentence summary of the key points.",
+            "medium": "Provide a comprehensive paragraph (5-7 sentences) covering the main concepts.",
+            "long": "Provide a detailed summary (2-3 paragraphs) with key points, examples, and important details."
+        }
+        
+        system_prompt = (
+            "You are the EduQuest Scroll Keeper, tasked with creating 'Quick Recaps' of study materials. "
+            f"{length_instructions.get(max_length, length_instructions['medium'])} "
+            "Focus on the most important concepts, key terms, and main ideas. "
+            "Structure the summary clearly with headers if needed (for long summaries). "
+            "Use student-friendly language and highlight connections between concepts."
+        )
+        
+        user_prompt = f"Summarize this study material:\n\n{text[:4000]}"  # Limit to avoid token overflow
+        
+        return self._chat(system_prompt, user_prompt)
+
     @staticmethod
     def _fix_json_escapes(json_text: str) -> str:
         """

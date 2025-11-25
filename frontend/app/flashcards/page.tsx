@@ -96,10 +96,14 @@ export default function FlashcardsPage() {
   const fetchStats = async () => {
     if (!user) return;
     try {
+      console.log(`[FLASHCARDS] Fetching stats for user: ${user.id}`);
       const res = await fetch(`/api/flashcards/stats/${user.id}`);
       if (res.ok) {
         const data = await res.json();
+        console.log('[FLASHCARDS] Stats received:', data);
         setStats(data);
+      } else {
+        console.error('[FLASHCARDS] Stats fetch failed:', res.status, await res.text());
       }
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -109,10 +113,14 @@ export default function FlashcardsPage() {
   const fetchSessions = async () => {
     if (!user) return;
     try {
+      console.log(`[FLASHCARDS] Fetching sessions for user: ${user.id}`);
       const res = await fetch(`/api/flashcards/sessions/${user.id}`);
       if (res.ok) {
         const data = await res.json();
+        console.log('[FLASHCARDS] Sessions received:', data);
         setSessions(data.sessions);
+      } else {
+        console.error('[FLASHCARDS] Sessions fetch failed:', res.status, await res.text());
       }
     } catch (error) {
       console.error("Error fetching sessions:", error);
@@ -227,6 +235,7 @@ export default function FlashcardsPage() {
     try {
       // Combine all file contents
       const combinedContent = files.map((f) => f.content).join("\n\n");
+      console.log(`[FLASHCARDS] Processing ${files.length} files, combined content length: ${combinedContent.length} characters`);
 
       const res = await fetch("/api/flashcards/generate", {
         method: "POST",
@@ -241,10 +250,13 @@ export default function FlashcardsPage() {
       });
 
       if (!res.ok) {
-        throw new Error("Failed to generate flashcards");
+        const errorText = await res.text();
+        console.error('[FLASHCARDS] Generation failed:', res.status, errorText);
+        throw new Error(`Failed to generate flashcards: ${errorText}`);
       }
 
       const data = await res.json();
+      console.log('[FLASHCARDS] Generated:', data);
       setGeneratedCards(data.flashcards);
 
       // Confetti celebration

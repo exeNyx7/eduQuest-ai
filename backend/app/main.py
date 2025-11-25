@@ -10,6 +10,7 @@ from app.routes.weekly_quests import router as weekly_quests_router
 from app.routes.daily_quests import router as daily_quests_router
 from app.routes.password_reset import router as password_reset_router
 from app.routes.flashcards import router as flashcards_router
+from app.routes.study import router as study_router
 from app.config.db import get_client, get_db
 
 app = FastAPI(title="EduQuest AI - Backend", version="0.1.0")
@@ -31,6 +32,7 @@ app.include_router(weekly_quests_router, prefix="/api/user")
 app.include_router(daily_quests_router, prefix="/api/user")
 app.include_router(password_reset_router, prefix="/api/auth")
 app.include_router(flashcards_router, prefix="/api/flashcards")
+app.include_router(study_router, prefix="/api/study")
 
 
 @app.get("/")

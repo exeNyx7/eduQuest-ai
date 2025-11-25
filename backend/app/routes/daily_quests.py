@@ -10,6 +10,27 @@ from app.config.db import get_db
 
 router = APIRouter()
 
+
+def serialize_mongo_doc(doc):
+    """Convert MongoDB document to JSON-serializable dict"""
+    if doc is None:
+        return None
+    if isinstance(doc, dict):
+        result = {}
+        for key, value in doc.items():
+            if key == "_id":
+                result[key] = str(value)
+            elif isinstance(value, datetime):
+                result[key] = value.isoformat()
+            elif isinstance(value, dict):
+                result[key] = serialize_mongo_doc(value)
+            elif isinstance(value, list):
+                result[key] = [serialize_mongo_doc(item) if isinstance(item, dict) else item for item in value]
+            else:
+                result[key] = value
+        return result
+    return doc
+
 class QuestProgress(BaseModel):
     id: int
     title: str
@@ -104,7 +125,7 @@ async def get_daily_quests(user_id: str):
             
             return new_quests.model_dump()
         
-        return existing_quests
+        return serialize_mongo_doc(existing_quests)
         
     except Exception as e:
         print(f"Error fetching daily quests: {e}")

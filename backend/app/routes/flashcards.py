@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -467,9 +467,10 @@ async def get_user_sessions(user_id: str):
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, user_id: str):
+async def delete_session(session_id: str, user_id: str = Query(...)):
     """
     Delete all flashcards in a session.
+    Requires user_id as query parameter for security.
     """
     flashcards_coll = get_collection("flashcards")
     

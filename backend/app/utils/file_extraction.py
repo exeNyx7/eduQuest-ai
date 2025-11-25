@@ -21,39 +21,49 @@ def extract_text_from_content(content: str) -> str:
     """
     Extract text from content that might contain binary data markers.
     Supports: plain text, PDF (base64), PPTX (base64)
+    Handles multiple files by extracting all binary markers.
     
     Args:
         content: Content string, potentially with [BINARY:filename:base64data] markers
         
     Returns:
-        Extracted text content
+        Extracted text content from all files combined
     """
-    # Check if content contains binary data marker
+    # Check if content contains binary data markers
     binary_pattern = r'\[BINARY:([^:]+):([^\]]+)\]'
-    match = re.search(binary_pattern, content)
+    matches = re.findall(binary_pattern, content)
     
-    if not match:
+    if not matches:
         # Plain text content
         return content
     
-    filename = match.group(1)
-    base64_data = match.group(2)
+    # Extract text from all binary files
+    extracted_texts = []
     
-    try:
-        # Decode base64
-        file_bytes = base64.b64decode(base64_data)
-        
-        # Determine file type and extract text
-        if filename.lower().endswith('.pdf'):
-            return extract_text_from_pdf(file_bytes)
-        elif filename.lower().endswith(('.pptx', '.ppt')):
-            return extract_text_from_pptx(file_bytes)
-        else:
-            return content  # Unsupported binary type, return as-is
+    for filename, base64_data in matches:
+        try:
+            # Decode base64
+            file_bytes = base64.b64decode(base64_data)
             
-    except Exception as e:
-        print(f"[FILE EXTRACTION ERROR] Failed to extract from {filename}: {str(e)}")
-        return f"[Error extracting text from {filename}]"
+            # Determine file type and extract text
+            if filename.lower().endswith('.pdf'):
+                text = extract_text_from_pdf(file_bytes)
+            elif filename.lower().endswith(('.pptx', '.ppt')):
+                text = extract_text_from_pptx(file_bytes)
+            else:
+                text = f"[Unsupported file type: {filename}]"
+            
+            extracted_texts.append(f"=== Content from {filename} ===\n{text}")
+            print(f"[FILE EXTRACTION] Extracted {len(text)} characters from {filename}")
+            
+        except Exception as e:
+            print(f"[FILE EXTRACTION ERROR] Failed to extract from {filename}: {str(e)}")
+            extracted_texts.append(f"[Error extracting text from {filename}: {str(e)}]")
+    
+    # Combine all extracted texts
+    combined = "\n\n".join(extracted_texts)
+    print(f"[FILE EXTRACTION] Total extracted content: {len(combined)} characters from {len(matches)} files")
+    return combined
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:

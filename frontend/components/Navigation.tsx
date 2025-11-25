@@ -63,6 +63,12 @@ export default function Navigation() {
                 >
                   🧠 Flashcards
                 </button>
+                <button
+                  onClick={() => router.push("/study")}
+                  className="text-gray-300 hover:text-yellow-300 px-3 py-2 rounded-lg transition-colors text-sm font-medium"
+                >
+                  📚 Library
+                </button>
               </>
             )}
             

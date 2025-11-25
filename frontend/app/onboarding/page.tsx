@@ -49,19 +49,29 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleComplete = () => {
-    // Update user profile
-    updateProfile({
-      goal: selectedGoal || undefined,
-      subjects: selectedSubjects,
-      powerLevel: selectedPowerLevel,
-    });
-    
-    // Mark onboarding as complete
-    localStorage.setItem("eduquest_onboarding_done", "true");
-    
-    // Redirect to dashboard
-    router.push("/dashboard");
+  const handleComplete = async () => {
+    try {
+      // Update user profile
+      await updateProfile({
+        goal: selectedGoal || undefined,
+        subjects: selectedSubjects,
+        powerLevel: selectedPowerLevel,
+      });
+      
+      // Mark onboarding as complete
+      localStorage.setItem("eduquest_onboarding_done", "true");
+      
+      // Small delay to ensure state updates
+      setTimeout(() => {
+        // Redirect to dashboard
+        router.push("/dashboard");
+      }, 100);
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      // Still redirect even if profile update fails
+      localStorage.setItem("eduquest_onboarding_done", "true");
+      router.push("/dashboard");
+    }
   };
 
   const toggleSubject = (subjectId: string) => {

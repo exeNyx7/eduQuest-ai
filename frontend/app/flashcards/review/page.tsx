@@ -99,6 +99,7 @@ export default function FlashcardReviewPage() {
   const handleReview = async (rating: "again" | "hard" | "good" | "easy") => {
     if (isReviewing || !currentCard) return;
 
+    console.log(`[FLASHCARDS] Reviewing card ${currentCard.id} with rating: ${rating}`);
     setIsReviewing(true);
 
     try {
@@ -108,7 +109,12 @@ export default function FlashcardReviewPage() {
         body: JSON.stringify({ rating }),
       });
 
+      console.log(`[FLASHCARDS] Review response status: ${res.status}`);
+      
       if (res.ok) {
+        const data = await res.json();
+        console.log(`[FLASHCARDS] Review response:`, data);
+        
         // Update session stats
         setSessionStats((prev) => ({
           ...prev,
@@ -117,8 +123,11 @@ export default function FlashcardReviewPage() {
 
         // Move to next card
         const nextIndex = currentIndex + 1;
+        console.log(`[FLASHCARDS] Moving to card ${nextIndex}/${cards.length}`);
+        
         if (nextIndex >= cards.length) {
           // Session complete!
+          console.log(`[FLASHCARDS] Session complete!`);
           confetti({
             particleCount: 200,
             spread: 100,
@@ -133,9 +142,12 @@ export default function FlashcardReviewPage() {
           setIsFlipped(false);
           setShowHint(false);
         }
+      } else {
+        const errorData = await res.json();
+        console.error(`[FLASHCARDS] Review failed:`, errorData);
       }
     } catch (error) {
-      console.error("Error reviewing card:", error);
+      console.error("[FLASHCARDS] Error reviewing card:", error);
     } finally {
       setIsReviewing(false);
     }
@@ -338,12 +350,12 @@ export default function FlashcardReviewPage() {
 
                       {/* Back Side */}
                       <div
-                        className="absolute inset-0 p-12 flex flex-col items-center justify-center"
+                        className={`absolute inset-0 p-12 flex flex-col items-center justify-center ${
+                          isFlipped ? "visible" : "invisible"
+                        }`}
                         style={{
                           backfaceVisibility: "hidden",
-                          transform: "rotateY(180deg)",
-                          opacity: isFlipped ? 1 : 0,
-                          visibility: isFlipped ? "visible" : "hidden"
+                          transform: "rotateY(180deg)"
                         }}
                       >
                         <div className="text-sm font-semibold text-green-300 mb-4">
