@@ -134,6 +134,7 @@ async def get_due_flashcards(user_id: str):
     """
     Get all flashcards due for review for a user.
     """
+    print(f"[FLASHCARDS] ⚙️ Fetching due cards for user: {user_id}")
     flashcards_coll = get_collection("flashcards")
     
     now = datetime.utcnow()
@@ -145,11 +146,18 @@ async def get_due_flashcards(user_id: str):
     }).sort("nextReview", 1)  # Oldest due first
     
     flashcards = []
+    cards_without_back = 0
     async for card in cursor:
+        back_content = card.get("back", "")
+        if not back_content:
+            cards_without_back += 1
+            print(f"[FLASHCARDS] ❌ WARNING: Due card {card['_id']} has NO back field!")
+            print(f"[FLASHCARDS] Front: {card.get('front', 'N/A')[:50]}")
+        
         flashcards.append({
             "id": str(card["_id"]),
             "front": card["front"],
-            "back": card["back"],
+            "back": back_content,
             "hint": card.get("hint", ""),
             "difficulty": card["difficulty"],
             "nextReview": card["nextReview"].isoformat(),
@@ -162,6 +170,14 @@ async def get_due_flashcards(user_id: str):
             "tags": card.get("tags", []),
             "bookmarked": card.get("bookmarked", False)
         })
+    
+    print(f"[FLASHCARDS] ✅ Returning {len(flashcards)} due cards")
+    if cards_without_back > 0:
+        print(f"[FLASHCARDS] ⚠️ CRITICAL: {cards_without_back} cards missing back field!")
+    if flashcards:
+        print(f"[FLASHCARDS] First card: front={bool(flashcards[0].get('front'))}, back={bool(flashcards[0].get('back'))}")
+        if flashcards[0].get('back'):
+            print(f"[FLASHCARDS] First card back length: {len(flashcards[0]['back'])} chars")
     
     return {
         "flashcards": flashcards,
@@ -174,6 +190,7 @@ async def get_session_cards(session_id: str):
     """
     Get all flashcards for a specific session (for session-based review).
     """
+    print(f"[FLASHCARDS] ⚙️ Fetching cards for session: {session_id}")
     flashcards_coll = get_collection("flashcards")
     
     cursor = flashcards_coll.find({
@@ -182,10 +199,15 @@ async def get_session_cards(session_id: str):
     
     flashcards = []
     async for card in cursor:
-        flashcards.append({
+        back_content = card.get("back", "")
+        if not back_content:
+            print(f"[FLASHCARDS] ❌ WARNING: Card {card['_id']} has NO back field!")
+            print(f"[FLASHCARDS] Card data: {card}")
+        
+        flashcard_obj = {
             "id": str(card["_id"]),
             "front": card["front"],
-            "back": card["back"],
+            "back": back_content,
             "hint": card.get("hint", ""),
             "difficulty": card["difficulty"],
             "nextReview": card["nextReview"].isoformat(),
@@ -197,7 +219,8 @@ async def get_session_cards(session_id: str):
             "sessionName": card.get("sessionName", ""),
             "tags": card.get("tags", []),
             "bookmarked": card.get("bookmarked", False)
-        })
+        }
+        flashcards.append(flashcard_obj)
     
     return {
         "flashcards": flashcards,

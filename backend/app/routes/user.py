@@ -80,17 +80,15 @@ async def submit_quiz_result(req: QuizResultRequest):
         if hasattr(req, 'timeBonus') and req.timeBonus:
             time_bonus = req.timeBonus
         
-        # Get streak multiplier
-        multiplier = get_streak_multiplier(current_streak)
-        
+        # Calculate XP (multiplier is calculated internally)
         xp_earned, breakdown = calculate_xp(
             req.correctAnswers,
             current_streak,
             req.perfectScore,
-            time_bonus,
-            multiplier
+            time_bonus
         )
         
+        multiplier = get_streak_multiplier(current_streak)
         print(f"[QUIZ SUBMIT] XP Earned: {xp_earned} (Base: {breakdown['base']}, Streak: {breakdown['streak_bonus']}, Perfect: {breakdown['perfect_bonus']}, Time: {breakdown['time_bonus']}, Multiplier: {multiplier}x)")
         
         # Update XP and rank (pass string, will be converted in function)

@@ -31,7 +31,6 @@ npm-debug.log*
 __pycache__/
 *.py[cod]
 backend/.cache/
-backend/models/
 
 # Testing
 coverage/

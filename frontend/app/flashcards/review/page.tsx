@@ -91,13 +91,17 @@ export default function FlashcardReviewPage() {
       if (res.ok) {
         const data = await res.json();
         console.log('[REVIEW] ✅ Fetched cards:', data.flashcards?.length || 0);
-        console.log('[REVIEW] First card sample:', data.flashcards?.[0]);
+        console.log('[REVIEW] First card FULL DATA:', JSON.stringify(data.flashcards?.[0], null, 2));
         
         // Validate cards have back field
-        const missingBack = data.flashcards.filter((c: any) => !c.back);
-        if (missingBack.length > 0) {
-          console.error('[REVIEW] ⚠️ Cards missing back field:', missingBack.length);
-          console.error('[REVIEW] Sample card without back:', missingBack[0]);
+        const cardsWithoutBack = data.flashcards.filter((c: any) => !c.back || c.back === '' || c.back === null || c.back === undefined);
+        if (cardsWithoutBack.length > 0) {
+          console.error('[REVIEW] ❌ CRITICAL: Cards missing back field:', cardsWithoutBack.length);
+          console.error('[REVIEW] Sample card without back:', JSON.stringify(cardsWithoutBack[0], null, 2));
+          alert(`⚠️ ${cardsWithoutBack.length} flashcards are missing answers! Please regenerate your flashcards.`);
+        } else {
+          console.log('[REVIEW] ✅ All cards have back field!');
+          console.log('[REVIEW] Sample back content:', data.flashcards[0]?.back?.substring(0, 100));
         }
         
         setCards(data.flashcards);
@@ -377,8 +381,13 @@ export default function FlashcardReviewPage() {
                           ANSWER
                         </div>
                         <p className="text-2xl font-semibold text-white text-center mb-4 whitespace-pre-wrap">
-                          {currentCard.back}
+                          {currentCard.back || "[NO ANSWER - Please regenerate flashcards]"}
                         </p>
+                        {!currentCard.back && (
+                          <div className="text-red-400 text-sm mt-2">
+                            ⚠️ This card is missing answer data
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 text-sm">
                           <span
                             className={`px-3 py-1 rounded-full font-semibold ${

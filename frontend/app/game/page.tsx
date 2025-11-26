@@ -155,6 +155,7 @@ export default function GameArenaPage() {
   const [showXPAnimation, setShowXPAnimation] = useState(false);
   const [currentXPGain, setCurrentXPGain] = useState(10);
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswer[]>([]);
+  const [answeredQuestions, setAnsweredQuestions] = useState<Set<number>>(new Set());
   
   // XP milestone detection
   const { showBurst, milestone, resetBurst } = useXPMilestone(user?.stats.totalXP || 0);
@@ -227,28 +228,34 @@ export default function GameArenaPage() {
   }, [showTutor, showRoughWork, showCompletion, selected, current, timerEnabled, timerPaused]);
 
   const onChoose = (opt: string) => {
-    // Prevent multiple selections OR answering after quiz completion
-    if (!current || selected || showCompletion) {
-      console.log('[GAME] Ignoring answer - quiz completed or already answered');
+    // Prevent multiple selections OR answering after quiz completion OR already answered this question
+    if (!current || selected || showCompletion || answeredQuestions.has(questionIndex)) {
+      console.log('[GAME] ❌ Ignoring answer - already answered question #', questionIndex + 1);
       return;
     }
+    
+    console.log(`[GAME] ✅ Answering question ${questionIndex + 1}/${quiz.length}:`, opt);
     
     setSelected(opt);
     const isCorrect = opt === current.answer;
     setFeedback(isCorrect ? "correct" : "wrong");
     
-    // Track answer
-    setQuizAnswers((prev) => [
-      ...prev,
-      {
+    // Mark this question as answered to prevent duplicates
+    setAnsweredQuestions(prev => new Set([...prev, questionIndex]));
+    
+    // Track answer - this should only happen ONCE per question
+    setQuizAnswers((prev) => {
+      const newAnswer = {
         question: current.question,
         options: current.options,
         userAnswer: opt,
         correctAnswer: current.answer,
         explanation: current.explanation,
         isCorrect,
-      },
-    ]);
+      };
+      console.log(`[GAME] 📊 Total answers tracked: ${prev.length + 1}`);
+      return [...prev, newAnswer];
+    });
     
     if (isCorrect) {
       sounds.correct();
@@ -262,29 +269,39 @@ export default function GameArenaPage() {
       
       setXp((x) => x + xpGain);
       setCorrectCount((c) => c + 1);
+      
+      console.log(`[GAME] ✅ Correct! Total: ${correctCount + 1}/${quiz.length}`);
     } else {
       sounds.wrong();
       setWrongCount((w) => w + 1);
-    }
-      if (!isCorrect) {
+      
+      console.log(`[GAME] ❌ Wrong! Total wrong: ${wrongCount + 1}`);
+      
+      // Show tutor modal for wrong answers
       setTutorQuestion(current.question);
       setTutorUserAnswer(opt);
       setTutorCorrectAnswer(current.answer);
       setTutorFallback(current.explanation);
       setShowTutor(true);
     }
+    
+    // Always advance to next question after a brief delay (whether correct or wrong)
     setTimeout(() => {
       setFeedback(null);
       setSelected(null);
-      if (isCorrect && questionIndex < quiz.length - 1) {
+      
+      if (questionIndex < quiz.length - 1) {
+        // Move to next question
+        console.log(`[GAME] ➡️ Moving to question ${questionIndex + 2}/${quiz.length}`);
         setQuestionIndex((i: number) => i + 1);
       } else if (questionIndex === quiz.length - 1 && !showCompletion) {
         // Quiz completed - submit to backend (only if not already shown)
-        console.log('[GAME] Quiz complete, submitting results...');
+        console.log('[GAME] 🏆 Quiz complete! Submitting results...');
+        console.log(`[GAME] Final score: ${correctCount} correct, ${wrongCount} wrong out of ${quiz.length} questions`);
         setShowCompletion(true); // Set immediately to prevent duplicate submissions
         setTimeout(() => submitQuizResults(), 800);
       }
-    }, 600);
+    }, isCorrect ? 600 : 1500); // Longer delay for wrong answers to show tutor
   };  const openHintModal = () => {
     if (!current) return;
     setTutorQuestion(current.question);
@@ -340,7 +357,7 @@ export default function GameArenaPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: user.id,
+            user_id: user.id, // Changed from userId to match backend schema
             quizId: contentId || `quiz_${Date.now()}`,
             score,
             totalQuestions: quiz.length,
