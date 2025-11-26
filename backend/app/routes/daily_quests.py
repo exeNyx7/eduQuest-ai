@@ -42,12 +42,12 @@ class QuestProgress(BaseModel):
     completed: bool
 
 class DailyQuestsData(BaseModel):
-    userId: str
+    user_id: str
     date: str  # ISO date string for today
     quests: List[QuestProgress]
 
 class UpdateProgressRequest(BaseModel):
-    userId: str
+    user_id: str
     questId: int
     increment: int = 1
 
@@ -106,12 +106,12 @@ async def get_daily_quests(user_id: str):
         today = get_today()
         
         # Find existing daily quests for this user
-        existing_quests = await collection.find_one({"userId": user_id})
+        existing_quests = await collection.find_one({"user_id": user_id})
         
         # If no quests exist or it's a new day, create/reset
         if not existing_quests or existing_quests.get("date") != today:
             new_quests = DailyQuestsData(
-                userId=user_id,
+                user_id=user_id,
                 date=today,
                 quests=create_default_daily_quests()
             )

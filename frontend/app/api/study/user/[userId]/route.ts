@@ -5,13 +5,21 @@ export async function GET(
   { params }: { params: { userId: string } }
 ) {
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
     const url = `${backendUrl}/api/study/files/${params.userId}`;
     
-    console.log("[API] Fetching scrolls from:", url);
+    console.log("[API] 🔍 Fetching scrolls from:", url);
     console.log("[API] User ID:", params.userId);
+    console.log("[API] Backend URL from env:", process.env.NEXT_PUBLIC_BACKEND_URL);
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store", // Disable caching to always get fresh data
+    });
+    
     const data = await response.json();
     
     console.log("[API] Response status:", response.status);

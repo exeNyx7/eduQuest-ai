@@ -82,12 +82,27 @@ export default function FlashcardReviewPage() {
       let url = `/api/flashcards/due/${user.id}`;
       if (sessionId) {
         url = `/api/flashcards/session/${sessionId}/cards`;
+        console.log('[REVIEW] Fetching session cards:', sessionId);
+      } else {
+        console.log('[REVIEW] Fetching due cards for user:', user.id);
       }
       
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        console.log('[REVIEW] ✅ Fetched cards:', data.flashcards?.length || 0);
+        console.log('[REVIEW] First card sample:', data.flashcards?.[0]);
+        
+        // Validate cards have back field
+        const missingBack = data.flashcards.filter((c: any) => !c.back);
+        if (missingBack.length > 0) {
+          console.error('[REVIEW] ⚠️ Cards missing back field:', missingBack.length);
+          console.error('[REVIEW] Sample card without back:', missingBack[0]);
+        }
+        
         setCards(data.flashcards);
+      } else {
+        console.error('[REVIEW] ❌ Failed to fetch cards:', res.status);
       }
     } catch (error) {
       console.error("Error fetching due cards:", error);

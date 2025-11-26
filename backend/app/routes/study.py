@@ -298,8 +298,12 @@ async def get_user_scrolls(user_id: str):
     Returns list of metadata for the user's library.
     """
     try:
-        print(f"[STUDY] Fetching scrolls for user: {user_id}", flush=True)
+        print(f"\n{'='*60}", flush=True)
+        print(f"[STUDY] ⚡ GET /files/{user_id} called", flush=True)
+        print(f"[STUDY] User ID: '{user_id}'", flush=True)
         print(f"[STUDY] User ID type: {type(user_id)}", flush=True)
+        print(f"[STUDY] User ID length: {len(user_id)}", flush=True)
+        print(f"{'='*60}\n", flush=True)
         
         # Use pymongo directly to bypass Motor issues
         try:
@@ -308,8 +312,15 @@ async def get_user_scrolls(user_id: str):
             sync_db = sync_client['eduquest']
             sync_coll = sync_db['study_materials']
             
-            docs = list(sync_coll.find({"user_id": user_id}).sort("upload_date", -1).limit(100))
-            print(f"[STUDY] Sync query found {len(docs)} documents", flush=True)
+            # Check total count first
+            total_count = sync_coll.count_documents({})
+            print(f"[STUDY] Total documents in collection: {total_count}", flush=True)
+            
+            # Try query
+            query = {"user_id": user_id}
+            print(f"[STUDY] Query: {query}", flush=True)
+            docs = list(sync_coll.find(query).sort("upload_date", -1).limit(100))
+            print(f"[STUDY] ✅ Sync query found {len(docs)} documents", flush=True)
             
             scrolls = []
             for doc in docs:

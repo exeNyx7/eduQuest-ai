@@ -230,6 +230,10 @@ export default function FlashcardsPage() {
       return;
     }
 
+    // Clear old generated cards to prevent showing stale data
+    setGeneratedCards([]);
+    console.log('[FLASHCARDS] Cleared old cards, starting fresh generation');
+
     setIsGenerating(true);
 
     try {
@@ -241,7 +245,7 @@ export default function FlashcardsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: user.id,
+          user_id: user.id,
           content: combinedContent || undefined,
           topic: topicInput.trim() || undefined,
           numCards: numCards,
@@ -256,8 +260,17 @@ export default function FlashcardsPage() {
       }
 
       const data = await res.json();
-      console.log('[FLASHCARDS] Generated:', data);
-      setGeneratedCards(data.flashcards);
+      console.log('[FLASHCARDS] ✅ Generation successful!');
+      console.log('[FLASHCARDS] Generated cards:', data.flashcards?.length || 0);
+      console.log('[FLASHCARDS] First card sample:', data.flashcards?.[0]);
+      
+      // Validate cards have required fields
+      const validCards = data.flashcards.filter((card: any) => card.front && card.back);
+      if (validCards.length !== data.flashcards.length) {
+        console.warn('[FLASHCARDS] ⚠️ Some cards missing front/back fields!');
+      }
+      
+      setGeneratedCards(validCards);
 
       // Confetti celebration
       confetti({
@@ -650,10 +663,37 @@ export default function FlashcardsPage() {
                   ✨ {generatedCards.length} Cards Generated!
                 </h2>
                 <p className="text-purple-200 mb-4">
-                  Your flashcards are ready for review. Start studying to master them!
+                  Your flashcards are ready for review. Preview below:
                 </p>
+                
+                {/* Preview first 3 cards */}
+                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                  {generatedCards.slice(0, 3).map((card, idx) => (
+                    <div key={idx} className="bg-white/5 rounded-lg p-3 border border-white/10">
+                      <div className="text-xs text-purple-300 font-semibold mb-1">Q:</div>
+                      <div className="text-sm text-white mb-2">{card.front}</div>
+                      <div className="text-xs text-green-300 font-semibold mb-1">A:</div>
+                      <div className="text-sm text-white/80">{card.back}</div>
+                    </div>
+                  ))}
+                  {generatedCards.length > 3 && (
+                    <div className="text-center text-purple-300 text-sm">
+                      +{generatedCards.length - 3} more cards...
+                    </div>
+                  )}
+                </div>
+                
                 <button
-                  onClick={() => router.push("/flashcards/review")}
+                  onClick={() => {
+                    // Pass sessionId if available
+                    const lastCard = generatedCards[generatedCards.length - 1];
+                    const sessionId = (lastCard as any)?.sessionId;
+                    if (sessionId) {
+                      router.push(`/flashcards/review?sessionId=${sessionId}`);
+                    } else {
+                      router.push("/flashcards/review");
+                    }
+                  }}
                   className="w-full py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-lg transition-all"
                 >
                   Start Review Session

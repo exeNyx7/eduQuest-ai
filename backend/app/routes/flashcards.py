@@ -14,7 +14,7 @@ ai_engine = AIEngine()
 
 class GenerateFlashcardsRequest(BaseModel):
     """Request to generate flashcards"""
-    userId: str
+    user_id: str
     content: Optional[str] = None  # Text content from files
     topic: Optional[str] = None  # Topic name if no content
     numCards: int = Field(default=10, ge=1, le=50)
@@ -27,7 +27,7 @@ class FlashcardResponse(BaseModel):
     front: str
     back: str
     difficulty: str
-    userId: str
+    user_id: str
     createdAt: str
     # SM-2 algorithm fields
     nextReview: str
@@ -76,7 +76,7 @@ async def generate_flashcards(req: GenerateFlashcardsRequest):
         
         for card_data in flashcards_data:
             flashcard = {
-                "userId": req.userId,
+                "user_id": req.user_id,
                 "front": card_data["front"],
                 "back": card_data["back"],
                 "hint": card_data.get("hint", ""),
@@ -140,7 +140,7 @@ async def get_due_flashcards(user_id: str):
     
     # Find flashcards where nextReview <= now
     cursor = flashcards_coll.find({
-        "userId": user_id,
+        "user_id": user_id,
         "nextReview": {"$lte": now}
     }).sort("nextReview", 1)  # Oldest due first
     
@@ -212,7 +212,7 @@ async def get_all_flashcards(user_id: str, status: Optional[str] = None):
     """
     flashcards_coll = get_collection("flashcards")
     
-    query = {"userId": user_id}
+    query = {"user_id": user_id}
     if status:
         query["status"] = status
     
@@ -244,6 +244,31 @@ async def get_all_flashcards(user_id: str, status: Optional[str] = None):
     }
 
 
+@router.get("/{flashcard_id}")
+async def get_flashcard_by_id(flashcard_id: str):
+    """
+    Debug: Fetch a single flashcard by ID.
+    """
+    flashcards_coll = get_collection("flashcards")
+    try:
+        card = await flashcards_coll.find_one({"_id": ObjectId(flashcard_id)})
+    except Exception as e:
+        print(f"[FLASHCARDS] Invalid ObjectId for get: {flashcard_id} error={e}")
+        raise HTTPException(status_code=400, detail="Invalid flashcard ID")
+
+    if not card:
+        print(f"[FLASHCARDS] Flashcard not found: {flashcard_id}")
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+
+    return {
+        "id": str(card["_id"]),
+        "front": card["front"],
+        "back": card["back"],
+        "userId": card.get("user_id", ""),
+        "sessionId": card.get("sessionId", ""),
+        "nextReview": card["nextReview"].isoformat(),
+    }
+
 @router.post("/{flashcard_id}/review")
 async def review_flashcard(flashcard_id: str, req: ReviewFlashcardRequest):
     """
@@ -255,10 +280,12 @@ async def review_flashcard(flashcard_id: str, req: ReviewFlashcardRequest):
     # Get the flashcard
     try:
         card = await flashcards_coll.find_one({"_id": ObjectId(flashcard_id)})
-    except:
+    except Exception as e:
+        print(f"[FLASHCARDS] Invalid ObjectId for review: {flashcard_id} error={e}")
         raise HTTPException(status_code=400, detail="Invalid flashcard ID")
     
     if not card:
+        print(f"[FLASHCARDS] Review target not found: {flashcard_id}")
         raise HTTPException(status_code=404, detail="Flashcard not found")
     
     # SM-2 Algorithm Implementation
@@ -359,7 +386,7 @@ async def delete_flashcard(flashcard_id: str, user_id: str):
     try:
         result = await flashcards_coll.delete_one({
             "_id": ObjectId(flashcard_id),
-            "userId": user_id
+            "user_id": user_id
         })
     except:
         raise HTTPException(status_code=400, detail="Invalid flashcard ID")
@@ -380,7 +407,7 @@ async def toggle_bookmark(flashcard_id: str, user_id: str):
     try:
         card = await flashcards_coll.find_one({
             "_id": ObjectId(flashcard_id),
-            "userId": user_id
+            "user_id": user_id
         })
     except:
         raise HTTPException(status_code=400, detail="Invalid flashcard ID")
@@ -409,15 +436,15 @@ async def get_flashcard_stats(user_id: str):
     flashcards_coll = get_collection("flashcards")
     
     # Count by status
-    total = await flashcards_coll.count_documents({"userId": user_id})
-    learning = await flashcards_coll.count_documents({"userId": user_id, "status": "learning"})
-    reviewing = await flashcards_coll.count_documents({"userId": user_id, "status": "reviewing"})
-    mastered = await flashcards_coll.count_documents({"userId": user_id, "status": "mastered"})
+    total = await flashcards_coll.count_documents({"user_id": user_id})
+    learning = await flashcards_coll.count_documents({"user_id": user_id, "status": "learning"})
+    reviewing = await flashcards_coll.count_documents({"user_id": user_id, "status": "reviewing"})
+    mastered = await flashcards_coll.count_documents({"user_id": user_id, "status": "mastered"})
     
     # Count due today
     now = datetime.utcnow()
-    due_today = await flashcards_coll.count_documents({
-        "userId": user_id,
+    due_now = await flashcards_coll.count_documents({
+        "user_id": user_id,
         "nextReview": {"$lte": now}
     })
     
@@ -426,7 +453,7 @@ async def get_flashcard_stats(user_id: str):
         "learning": learning,
         "reviewing": reviewing,
         "mastered": mastered,
-        "dueToday": due_today
+        "dueToday": due_now
     }
 
 
@@ -439,7 +466,7 @@ async def get_user_sessions(user_id: str):
     
     # Get distinct sessions using aggregation
     pipeline = [
-        {"$match": {"userId": user_id}},
+        {"$match": {"user_id": user_id}},
         {
             "$group": {
                 "_id": "$sessionId",
@@ -476,7 +503,7 @@ async def delete_session(session_id: str, user_id: str = Query(...)):
     
     result = await flashcards_coll.delete_many({
         "sessionId": session_id,
-        "userId": user_id
+        "user_id": user_id
     })
     
     return {
@@ -495,7 +522,7 @@ async def get_review_history(user_id: str, limit: int = 100):
     
     # Get all flashcards with review history
     flashcards = await flashcards_coll.find({
-        "userId": user_id,
+        "user_id": user_id,
         "reviewHistory": {"$exists": True, "$ne": []}
     }).to_list(length=None)
     

@@ -7,7 +7,8 @@ export async function GET(
   try {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const response = await fetch(
-      `${backendUrl}/api/flashcards/session/${params.sessionId}/cards`
+      `${backendUrl}/api/flashcards/session/${params.sessionId}/cards`,
+      { cache: "no-store" }
     );
 
     const data = await response.json();

@@ -6,7 +6,8 @@ export async function GET(
 ) {
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/flashcards/due/${params.userId}`
+      `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/flashcards/due/${params.userId}`,
+      { cache: "no-store" }
     );
 
     const data = await response.json();

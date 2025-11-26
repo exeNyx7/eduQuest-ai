@@ -80,22 +80,34 @@ export default function StudyPage() {
     setIsLoadingScrolls(true);
     try {
       console.log("[STUDY] Fetching scrolls for user:", user.id);
+      console.log("[STUDY] User object:", JSON.stringify(user, null, 2));
       const res = await fetch(`/api/study/user/${user.id}`);
       console.log("[STUDY] Response status:", res.status);
       
       if (res.ok) {
         const data = await res.json();
-        console.log("[STUDY] Received data:", data);
+        console.log("[STUDY] Received data:", JSON.stringify(data, null, 2));
+        console.log("[STUDY] Scrolls array:", data.scrolls);
         console.log("[STUDY] Scrolls count:", data.scrolls?.length || 0);
+        
+        if (data.scrolls && data.scrolls.length > 0) {
+          console.log("[STUDY] ✅ Scrolls loaded successfully!");
+          console.log("[STUDY] First scroll:", data.scrolls[0]);
+        } else {
+          console.warn("[STUDY] ⚠️ No scrolls in response!");
+        }
+        
         setScrolls(data.scrolls || []);
       } else {
         const errorData = await res.json();
-        console.error("[STUDY] Failed to fetch scrolls:", errorData);
+        console.error("[STUDY] ❌ Failed to fetch scrolls:", errorData);
         setScrolls([]);
+        alert(`Error: ${errorData.detail || 'Could not fetch your scrolls. The arcane energies are weak today.'}`);
       }
     } catch (error) {
-      console.error("[STUDY] Error fetching scrolls:", error);
+      console.error("[STUDY] ❌ Exception fetching scrolls:", error);
       setScrolls([]);
+      alert("A network error occurred while fetching your scrolls. Please check your connection.");
     } finally {
       setIsLoadingScrolls(false);
     }
@@ -694,8 +706,8 @@ export default function StudyPage() {
                                     )}
                                     <span className={`text-xs font-semibold ${
                                       msg.role === "user" 
-                                        ? "text-purple-300 ml-auto" 
-                                        : "text-yellow-300"
+                                        ? "text-purple-200" 
+                                        : "text-yellow-200"
                                     }`}>
                                       {msg.role === "user" ? "✨ Your Speech" : "🔮 Oracle's Wisdom"}
                                     </span>
@@ -703,23 +715,15 @@ export default function StudyPage() {
                                       <MessageSquare className="w-4 h-4 text-purple-300" />
                                     )}
                                   </div>
-                                  <motion.div
-                                    whileHover={{ scale: 1.02 }}
-                                    className={`p-4 rounded-xl relative overflow-hidden ${
+                                  <div
+                                    className={`p-3 rounded-2xl text-white ${
                                       msg.role === "user"
-                                        ? "bg-gradient-to-br from-purple-500/40 to-pink-500/40 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20"
-                                        : "bg-gradient-to-br from-indigo-900/60 to-purple-900/60 text-purple-100 border border-yellow-400/30 shadow-lg shadow-yellow-500/10"
+                                        ? "bg-purple-600"
+                                        : "bg-black/30"
                                     }`}
                                   >
-                                    {msg.role === "assistant" && (
-                                      <motion.div
-                                        className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-yellow-400/10 to-transparent"
-                                        animate={{ x: ["-100%", "100%"] }}
-                                        transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
-                                      />
-                                    )}
-                                    <p className="whitespace-pre-wrap relative z-10">{msg.content}</p>
-                                  </motion.div>
+                                    <p>{msg.content}</p>
+                                  </div>
                                 </div>
                               </motion.div>
                             ))}

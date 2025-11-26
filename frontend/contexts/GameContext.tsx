@@ -33,6 +33,7 @@ interface GameContextType {
   setUser: (user: User) => void;
   updateStats: (stats: Partial<UserStats>) => void;
   updateProfile: (profile: Partial<UserProfile>) => void;
+  refreshUser: (userId: string) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -42,11 +43,43 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const refreshUser = async (userId: string) => {
+    if (userId.startsWith("guest_")) {
+      console.log("Guest user, no refresh needed.");
+      return;
+    }
+    try {
+      console.log(`[GameContext] Refreshing user ${userId}`);
+      const res = await fetch(`/api/user/profile/${userId}`);
+      if (res.ok) {
+        const updatedUserData = await res.json();
+        // The backend returns _id, but the frontend uses id.
+        const frontendUser = { ...updatedUserData, id: updatedUserData._id };
+        delete frontendUser._id;
+        setUser(frontendUser);
+        console.log("[GameContext] User refreshed from API");
+      } else {
+        console.error("[GameContext] Failed to refresh user, using localStorage version.");
+        // If API fails, we stick with localStorage but log it.
+        const savedUser = localStorage.getItem("eduquest_user");
+        if (savedUser) {
+          setUserState(JSON.parse(savedUser));
+        }
+      }
+    } catch (error) {
+      console.error("[GameContext] Error refreshing user:", error);
+    }
+  };
+
   // Initialize user from localStorage on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem("eduquest_user");
-    if (savedUser) {
-      setUserState(JSON.parse(savedUser));
+    const savedUserString = localStorage.getItem("eduquest_user");
+    if (savedUserString) {
+      const savedUser = JSON.parse(savedUserString);
+      setUserState(savedUser);
+      if (!savedUser.isGuest) {
+        refreshUser(savedUser.id);
+      }
     } else {
       // Create guest user with DiceBear avatar
       const guestId = `guest_${Date.now()}`;
@@ -101,7 +134,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <GameContext.Provider value={{ user, setUser, updateStats, updateProfile, isLoading }}>
+    <GameContext.Provider value={{ user, setUser, updateStats, updateProfile, refreshUser, isLoading }}>
       {children}
     </GameContext.Provider>
   );

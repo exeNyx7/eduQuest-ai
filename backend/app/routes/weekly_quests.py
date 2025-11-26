@@ -20,14 +20,14 @@ class QuestProgress(BaseModel):
     completed: bool
 
 class WeeklyQuestsData(BaseModel):
-    userId: str
+    user_id: str
     weekStart: str  # ISO date string for Monday of the current week
     quests: List[QuestProgress]
     allCompleted: bool
     bonusAwarded: bool
 
 class UpdateProgressRequest(BaseModel):
-    userId: str
+    user_id: str
     quizScore: Optional[int] = None
     currentStreak: Optional[int] = None
 
@@ -88,12 +88,12 @@ async def get_weekly_quests(user_id: str):
         current_week_start = get_week_start()
         
         # Find existing weekly quests for this user
-        existing_quests = await collection.find_one({"userId": user_id})
+        existing_quests = await collection.find_one({"user_id": user_id})
         
         # If no quests exist or it's a new week, create/reset
         if not existing_quests or existing_quests.get("weekStart") != current_week_start:
             new_quests = WeeklyQuestsData(
-                userId=user_id,
+                user_id=user_id,
                 weekStart=current_week_start,
                 quests=create_default_quests(),
                 allCompleted=False,

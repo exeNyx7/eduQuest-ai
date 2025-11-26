@@ -34,10 +34,10 @@ async def submit_quiz_result(req: QuizResultRequest):
     Submit quiz results and update user stats/XP
     """
     try:
-        print(f"[QUIZ SUBMIT] User {req.userId} completed quiz - Score: {req.score}/{req.totalQuestions}")
+        print(f"[QUIZ SUBMIT] User {req.user_id} completed quiz - Score: {req.score}/{req.totalQuestions}")
         
         # Check if guest user (starts with "guest_")
-        is_guest = req.userId.startswith("guest_")
+        is_guest = req.user_id.startswith("guest_")
         
         if is_guest:
             # Guest mode: Calculate XP but don't save to DB
@@ -64,7 +64,7 @@ async def submit_quiz_result(req: QuizResultRequest):
         
         # Convert string ID to ObjectId
         try:
-            user_object_id = ObjectId(req.userId)
+            user_object_id = ObjectId(req.user_id)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid user ID format")
         
@@ -94,7 +94,7 @@ async def submit_quiz_result(req: QuizResultRequest):
         print(f"[QUIZ SUBMIT] XP Earned: {xp_earned} (Base: {breakdown['base']}, Streak: {breakdown['streak_bonus']}, Perfect: {breakdown['perfect_bonus']}, Time: {breakdown['time_bonus']}, Multiplier: {multiplier}x)")
         
         # Update XP and rank (pass string, will be converted in function)
-        xp_result = await update_user_xp(req.userId, xp_earned)
+        xp_result = await update_user_xp(req.user_id, xp_earned)
         
         # Update answer counts (use ObjectId here)
         await users_coll.update_one(
@@ -109,7 +109,7 @@ async def submit_quiz_result(req: QuizResultRequest):
         )
         
         # Update daily streak (only once per day)
-        streak_result = await update_streak(req.userId)
+        streak_result = await update_streak(req.user_id)
         if streak_result["updated"]:
             print(f"[QUIZ SUBMIT] Daily streak updated: {streak_result['currentStreak']}")
             if streak_result.get("milestone"):
@@ -128,7 +128,7 @@ async def submit_quiz_result(req: QuizResultRequest):
             "totalCorrect": updated_user.get("stats", {}).get("totalCorrect", 0),
             "isPerfect": req.score == 100,
         }
-        newly_unlocked = await check_achievements(req.userId, user_stats)
+        newly_unlocked = await check_achievements(req.user_id, user_stats)
         print(f"[QUIZ SUBMIT] Achievements unlocked: {[a['name'] for a in newly_unlocked]}")
         
         # TODO: Check and update daily quests
@@ -214,7 +214,7 @@ async def get_leaderboard_rankings(
         entries = [
             LeaderboardEntry(
                 rank=e["rank"],
-                userId=e["userId"],
+                user_id=e["userId"],
                 username=e["username"],
                 avatar=e["avatar"],
                 totalXP=e["totalXP"],
@@ -231,7 +231,7 @@ async def get_leaderboard_rankings(
         if user_id:
             # Find user in entries
             for entry in entries:
-                if entry.userId == user_id:
+                if entry.user_id == user_id:
                     user_rank = entry.rank
                     break
             
