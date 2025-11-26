@@ -109,6 +109,10 @@ async def get_weekly_quests(user_id: str):
             
             return new_quests.model_dump()
         
+        # Convert ObjectId to string for JSON serialization
+        if "_id" in existing_quests:
+            existing_quests["_id"] = str(existing_quests["_id"])
+        
         return existing_quests
         
     except Exception as e:
@@ -129,12 +133,12 @@ async def update_weekly_quest_progress(request: UpdateProgressRequest):
         current_week_start = get_week_start()
         
         # Get current weekly quests
-        weekly_data = await collection.find_one({"userId": request.userId})
+        weekly_data = await collection.find_one({"userId": request.user_id})
         
         if not weekly_data or weekly_data.get("weekStart") != current_week_start:
             # Create new quests if they don't exist for this week
-            await get_weekly_quests(request.userId)
-            weekly_data = await collection.find_one({"userId": request.userId})
+            await get_weekly_quests(request.user_id)
+            weekly_data = await collection.find_one({"userId": request.user_id})
         
         quests = weekly_data["quests"]
         updated = False
@@ -182,7 +186,7 @@ async def update_weekly_quest_progress(request: UpdateProgressRequest):
         # Update the document
         if updated:
             await collection.update_one(
-                {"userId": request.userId},
+                {"userId": request.user_id},
                 {"$set": {
                     "quests": quests,
                     "allCompleted": all_completed,

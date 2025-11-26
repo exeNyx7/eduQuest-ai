@@ -202,7 +202,7 @@ export async function updateWeeklyQuestProgress(userId: string, quizScore: numbe
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        userId,
+        user_id: userId, // Changed from userId to match backend schema
         quizScore,
         currentStreak,
       }),
