@@ -77,8 +77,89 @@ export default function FlashcardsPage() {
     if (user) {
       fetchStats();
       fetchSessions();
+      
+      // Check if coming from study page with scroll content
+      const urlParams = new URLSearchParams(window.location.search);
+      const fromScroll = urlParams.get('from');
+      
+      if (fromScroll === 'scroll') {
+        const storedData = sessionStorage.getItem('flashcard_content');
+        if (storedData) {
+          try {
+            const { content, topic, filename } = JSON.parse(storedData);
+            console.log('[FLASHCARDS] Auto-generating from scroll:', topic);
+            
+            // Clear storage
+            sessionStorage.removeItem('flashcard_content');
+            
+            // Set up for generation
+            setTopicInput(topic);
+            setInputMode('topic');
+            
+            // Auto-generate after a brief delay
+            setTimeout(() => {
+              autoGenerateFromScroll(content, topic);
+            }, 500);
+          } catch (error) {
+            console.error('[FLASHCARDS] Failed to parse stored content:', error);
+          }
+        }
+      }
     }
   }, [user]);
+  
+  const autoGenerateFromScroll = async (content: string, topic: string) => {
+    if (!user) return;
+    
+    setIsGenerating(true);
+    setGeneratedCards([]);
+    
+    try {
+      console.log('[FLASHCARDS] Auto-generating from scroll content');
+      
+      const res = await fetch("/api/flashcards/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          content: content,
+          topic: topic,
+          numCards: 10,
+          difficulty: "medium",
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to generate flashcards: ${await res.text()}`);
+      }
+
+      const data = await res.json();
+      console.log('[FLASHCARDS] ✅ Auto-generated:', data.flashcards?.length || 0, 'cards');
+      
+      const validCards = data.flashcards.filter((card: any) => card.front && card.back);
+      setGeneratedCards(validCards);
+
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+
+      fetchStats();
+      fetchSessions();
+      
+      // Clear URL params
+      if (window.location.search.includes('from=scroll')) {
+        window.history.replaceState({}, '', '/flashcards');
+      }
+      
+    } catch (error) {
+      console.error("Error auto-generating flashcards:", error);
+      alert("Failed to generate flashcards. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   // Refresh stats when page becomes visible
   useEffect(() => {

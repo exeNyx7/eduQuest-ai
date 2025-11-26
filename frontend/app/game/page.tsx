@@ -82,10 +82,47 @@ export default function GameArenaPage() {
 
   useEffect(() => {
     const stored = sessionStorage.getItem("eduquest_quiz");
+    console.log('[GAME] Checking for quiz data in sessionStorage');
+    
     if (stored) {
       try {
         const data = JSON.parse(stored);
-        setQuiz(data.items || []);
+        console.log('[GAME] Loaded quiz data:', {
+          itemCount: data.items?.length || 0,
+          topic: data.topic,
+          hasContentId: !!data.content_id
+        });
+        
+        // Validate quiz data
+        if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+          console.error('[GAME] ❌ Invalid quiz data: no items array');
+          alert('Quiz data is invalid. Please generate a new quiz.');
+          router.push('/quest');
+          return;
+        }
+        
+        // Validate each question
+        const validItems = data.items.filter((item: any) => 
+          item.question && 
+          item.options && 
+          Array.isArray(item.options) && 
+          item.options.length >= 2 &&
+          item.answer
+        );
+        
+        if (validItems.length === 0) {
+          console.error('[GAME] ❌ No valid quiz items found');
+          alert('Quiz generation failed. Please try again.');
+          router.push('/quest');
+          return;
+        }
+        
+        if (validItems.length < data.items.length) {
+          console.warn(`[GAME] ⚠️ Filtered out ${data.items.length - validItems.length} invalid items`);
+        }
+        
+        console.log('[GAME] ✅ Loaded', validItems.length, 'valid quiz questions');
+        setQuiz(validItems);
         setTopic(data.topic || "Learning Quest");
         setBgUrl(buildUnsplashUrl(data.topic || "learning"));
         setContentId(data.content_id || null);
@@ -97,31 +134,18 @@ export default function GameArenaPage() {
         }
         
         setQuizStartTime(Date.now());
-      } catch {
-        // fallback demo
-        setQuiz([
-          {
-            question: "Fallback: Capital of France?",
-            options: ["Berlin", "Madrid", "Paris", "Rome"],
-            answer: "Paris",
-            explanation: "Paris is the capital and most populous city of France.",
-          },
-        ]);
+      } catch (error) {
+        console.error('[GAME] ❌ Error parsing quiz data:', error);
+        alert('Failed to load quiz. Please generate a new quiz.');
+        router.push('/quest');
       }
     } else {
-      // No data yet, redirect to quest page or use demo
-      setQuiz([
-        {
-          question: "Demo: Capital of France?",
-          options: ["Berlin", "Madrid", "Paris", "Rome"],
-          answer: "Paris",
-          explanation: "Paris is the capital and most populous city of France.",
-        },
-      ]);
+      console.warn('[GAME] ⚠️ No quiz data in sessionStorage, redirecting to quest page');
+      router.push('/quest');
     }
     const t = setTimeout(() => setLoading(false), 500);
     return () => clearTimeout(t);
-  }, []);
+  }, [router]);
   
   const [xp, setXp] = useState<number>(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -203,7 +227,12 @@ export default function GameArenaPage() {
   }, [showTutor, showRoughWork, showCompletion, selected, current, timerEnabled, timerPaused]);
 
   const onChoose = (opt: string) => {
-    if (!current || selected) return; // Prevent multiple selections
+    // Prevent multiple selections OR answering after quiz completion
+    if (!current || selected || showCompletion) {
+      console.log('[GAME] Ignoring answer - quiz completed or already answered');
+      return;
+    }
+    
     setSelected(opt);
     const isCorrect = opt === current.answer;
     setFeedback(isCorrect ? "correct" : "wrong");
@@ -237,7 +266,7 @@ export default function GameArenaPage() {
       sounds.wrong();
       setWrongCount((w) => w + 1);
     }
-    if (!isCorrect) {
+      if (!isCorrect) {
       setTutorQuestion(current.question);
       setTutorUserAnswer(opt);
       setTutorCorrectAnswer(current.answer);
@@ -249,14 +278,14 @@ export default function GameArenaPage() {
       setSelected(null);
       if (isCorrect && questionIndex < quiz.length - 1) {
         setQuestionIndex((i: number) => i + 1);
-      } else if (questionIndex === quiz.length - 1) {
-        // Quiz completed - submit to backend
+      } else if (questionIndex === quiz.length - 1 && !showCompletion) {
+        // Quiz completed - submit to backend (only if not already shown)
+        console.log('[GAME] Quiz complete, submitting results...');
+        setShowCompletion(true); // Set immediately to prevent duplicate submissions
         setTimeout(() => submitQuizResults(), 800);
       }
     }, 600);
-  };
-
-  const openHintModal = () => {
+  };  const openHintModal = () => {
     if (!current) return;
     setTutorQuestion(current.question);
     setTutorUserAnswer(""); // No answer selected yet
@@ -394,6 +423,32 @@ export default function GameArenaPage() {
         // Update weekly quest progress
         updateWeeklyQuestProgress(user.id, score, user.stats.currentStreak);
         console.log(`[QUIZ] 📆 Weekly quest progress updated`);
+        
+        // Store quiz history for progressive difficulty (if content_id exists)
+        if (contentId) {
+          const quizHistoryKey = `quiz_history_${contentId}`;
+          const quizHistory = JSON.parse(localStorage.getItem(quizHistoryKey) || '[]');
+          quizHistory.push({
+            score,
+            correctCount,
+            wrongCount,
+            timestamp: Date.now(),
+            xpEarned: result.xpEarned,
+            difficulty: sessionStorage.getItem("eduquest_quiz") 
+              ? JSON.parse(sessionStorage.getItem("eduquest_quiz") || "{}").difficulty || 'medium'
+              : 'medium'
+          });
+          // Keep only last 10 attempts
+          if (quizHistory.length > 10) {
+            quizHistory.shift();
+          }
+          localStorage.setItem(quizHistoryKey, JSON.stringify(quizHistory));
+          console.log('[QUIZ] 📊 History updated:', {
+            attempts: quizHistory.length,
+            latestScore: score,
+            avgScore: (quizHistory.reduce((sum: number, h: any) => sum + h.score, 0) / quizHistory.length).toFixed(1)
+          });
+        }
         
         // Store results in sessionStorage and redirect to results page
         const quizResults = {

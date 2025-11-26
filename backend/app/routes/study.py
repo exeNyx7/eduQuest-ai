@@ -357,6 +357,47 @@ async def get_user_scrolls(user_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to fetch scrolls: {str(e)}")
 
 
+@router.get("/content/{content_id}")
+async def get_scroll_content(content_id: str, user_id: str):
+    """
+    Get full text content of a scroll by content_id.
+    Used for quiz and flashcard generation.
+    """
+    try:
+        print(f"[STUDY] Fetching content for content_id: {content_id}, user: {user_id}")
+        
+        from pymongo import MongoClient
+        sync_client = MongoClient('mongodb://localhost:27017/')
+        sync_db = sync_client['eduquest']
+        sync_coll = sync_db['study_materials']
+        
+        doc = sync_coll.find_one({
+            "content_id": content_id,
+            "user_id": user_id
+        })
+        
+        if not doc:
+            print(f"[STUDY] ❌ Scroll not found for content_id: {content_id}")
+            raise HTTPException(status_code=404, detail="Scroll not found")
+        
+        full_text = doc.get("full_text", "")
+        print(f"[STUDY] ✅ Retrieved {len(full_text)} characters")
+        
+        return {
+            "content_id": content_id,
+            "filename": doc.get("filename"),
+            "topic": doc.get("topic"),
+            "text": full_text,
+            "length": len(full_text)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[STUDY ERROR] Failed to fetch content: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch content: {str(e)}")
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_scroll(req: ChatWithScrollRequest):
     """

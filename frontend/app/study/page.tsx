@@ -292,16 +292,141 @@ export default function StudyPage() {
     }
   };
 
-  const handleForgeQuiz = () => {
-    if (!selectedScroll) return;
-    // Redirect to game page with content_id
-    router.push(`/game?content_id=${selectedScroll.content_id}`);
+  const handleForgeQuiz = async () => {
+    if (!selectedScroll || !user) return;
+    
+    try {
+      console.log('[STUDY] Generating quiz for scroll:', selectedScroll.filename);
+      
+      // Step 1: Fetch full text content
+      const contentRes = await fetch(
+        `/api/study/content/${selectedScroll.content_id}?user_id=${user.id}`
+      );
+      
+      if (!contentRes.ok) {
+        throw new Error('Failed to fetch scroll content');
+      }
+      
+      const contentData = await contentRes.json();
+      console.log('[STUDY] Retrieved content:', contentData.length, 'characters');
+      
+      // Step 2: Determine difficulty based on user stats and quiz history
+      const quizHistoryKey = `quiz_history_${selectedScroll.content_id}`;
+      const quizHistory = JSON.parse(localStorage.getItem(quizHistoryKey) || '[]');
+      
+      let difficulty = 'easy';
+      let numQuestions = 10;
+      
+      if (quizHistory.length === 0) {
+        // First attempt - start easy
+        difficulty = 'easy';
+        numQuestions = 10;
+        console.log('[STUDY] First quiz attempt - starting with EASY');
+      } else {
+        // Calculate average score from history
+        const avgScore = quizHistory.reduce((sum: number, h: any) => sum + h.score, 0) / quizHistory.length;
+        const lastScore = quizHistory[quizHistory.length - 1].score;
+        
+        console.log('[STUDY] Quiz history:', {
+          attempts: quizHistory.length,
+          avgScore: avgScore.toFixed(1),
+          lastScore
+        });
+        
+        // Progressive difficulty based on performance
+        if (avgScore >= 90 && lastScore >= 85) {
+          difficulty = 'hard';
+          numQuestions = 15;
+          console.log('[STUDY] 🔥 Excellent performance! Generating HARD quiz with 15 questions');
+        } else if (avgScore >= 70) {
+          difficulty = 'medium';
+          numQuestions = 12;
+          console.log('[STUDY] 📈 Good progress! Generating MEDIUM quiz with 12 questions');
+        } else {
+          difficulty = 'easy';
+          numQuestions = 10;
+          console.log('[STUDY] 📚 Building foundation! Generating EASY quiz with 10 questions');
+        }
+      }
+      
+      // Step 3: Generate quiz with adaptive settings
+      const quizRes = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/generate-quiz`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text_context: contentData.text,
+            num_questions: numQuestions,
+            difficulty: difficulty,
+            // Add timestamp to ensure unique generation
+            seed: Date.now()
+          })
+        }
+      );
+      
+      if (!quizRes.ok) {
+        throw new Error('Failed to generate quiz');
+      }
+      
+      const quizData = await quizRes.json();
+      console.log('[STUDY] ✅ Generated quiz:', {
+        questions: quizData.items?.length || 0,
+        difficulty,
+        attempt: quizHistory.length + 1
+      });
+      
+      // Store in sessionStorage for game page
+      sessionStorage.setItem('eduquest_quiz', JSON.stringify({
+        topic: contentData.topic || selectedScroll.filename,
+        items: quizData.items,
+        content_id: selectedScroll.content_id,
+        timerEnabled: false,
+        difficulty: difficulty,
+        attempt: quizHistory.length + 1
+      }));
+      
+      // Navigate to game page
+      router.push('/game');
+      
+    } catch (error) {
+      console.error('[STUDY] Quiz generation error:', error);
+      alert('Failed to generate quiz. Please try again.');
+    }
   };
 
-  const handleCreateFlashcards = () => {
-    if (!selectedScroll) return;
-    // Redirect to flashcards page with content_id
-    router.push(`/flashcards?content_id=${selectedScroll.content_id}`);
+  const handleCreateFlashcards = async () => {
+    if (!selectedScroll || !user) return;
+    
+    try {
+      console.log('[STUDY] Generating flashcards for scroll:', selectedScroll.filename);
+      
+      // Fetch full text content
+      const contentRes = await fetch(
+        `/api/study/content/${selectedScroll.content_id}?user_id=${user.id}`
+      );
+      
+      if (!contentRes.ok) {
+        throw new Error('Failed to fetch scroll content');
+      }
+      
+      const contentData = await contentRes.json();
+      console.log('[STUDY] Retrieved content:', contentData.length, 'characters');
+      
+      // Store in sessionStorage instead of URL to avoid length limits
+      sessionStorage.setItem('flashcard_content', JSON.stringify({
+        content: contentData.text,
+        topic: contentData.topic || selectedScroll.filename,
+        filename: selectedScroll.filename
+      }));
+      
+      // Navigate to flashcards page
+      router.push('/flashcards?from=scroll');
+      
+    } catch (error) {
+      console.error('[STUDY] Flashcard prep error:', error);
+      alert('Failed to prepare flashcards. Please try again.');
+    }
   };
 
   if (!mounted) return null;
